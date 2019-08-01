@@ -1,76 +1,74 @@
-var httpProxy = require('http-proxy');
-var http = require('http');
-var url = require('url');
-var net = require('net');
+//Requires the http-proxy module
+//Usage: node server.js <port>
 
-var server = http.createServer(function(req, res) {
-    var urlObj = url.parse(req.url);
-    var target = urlObj.protocol + '//' + urlObj.host;
+const httpProxy = require('http-proxy');
+const http = require('http');
+const url = require('url');
+const net = require('net');
 
-    console.log('Proxy HTTP request for:', target);
+//Check if the port was supplied
+const port = process.argv[2];
+if (port === undefined) {
+    console.error('You need to specify the TCP listen port');
+    process.exit();
+}
 
-    var proxy = httpProxy.createProxyServer({});
-    proxy.on('error', function(err, req, res) {
-        console.log('proxy error', err);
+//Handles HTTP traffic
+const server = http.createServer((req, res) => {
+    const urlObj = url.parse(req.url);
+    const target = `${urlObj.protocol}//${urlObj.host}`;
+    console.log(`Proxy HTTP request for: ${target}`);
+
+    const proxy = httpProxy.createProxyServer({});
+    proxy.on('error', (err, req, res) => {
+        console.error('Proxy error: ', err);
         res.end();
     });
-
     proxy.web(req, res, {
-        target: target
+        target
     });
-}).listen(process.argv[2]); //this is the port your clients will connect to
+}).listen(port);
+console.log(`Listening on ${port}`);
 
-var regex_hostport = /^([^:]+)(:([0-9]+))?$/;
+//Extract host information from the request url. If the port was included in the url, it will overwrite the default port
+const getHostPortFromString = (hostString, defaultPort) => {
+    let host = hostString;
+    let port = defaultPort;
 
-var getHostPortFromString = function(hostString, defaultPort) {
-    var host = hostString;
-    var port = defaultPort;
-
-    var result = regex_hostport.exec(hostString);
-    if (result != null) {
-        host = result[1];
-        if (result[2] != null) {
-            port = result[3];
+    const rgxResult = /^([^:]+)(:([0-9]+))?$/.exec(hostString);
+    if (rgxResult != null) {
+        host = rgxResult[1];
+        if (rgxResult[2] != null) {
+            port = rgxResult[3];
         }
     }
-    return ([host, port]);
+    return {host, port};
 };
 
-server.addListener('connect', function(req, socket, bodyhead) {
-    var hostPort = getHostPortFromString(req.url, 443);
-    var hostDomain = hostPort[0];
-    var port = parseInt(hostPort[1]);
-    console.log('Proxying HTTPS request for:', hostDomain, port);
+//Handles HTTPS traffic
+server.addListener('connect', (req, socket, bodyhead) => {
+    const hostPort = getHostPortFromString(req.url, 443);
+    console.log(`Proxying an HTTPS request for: ${hostPort.host}:${hostPort.port}`);
 
-    var proxySocket = new net.Socket();
-    proxySocket.connect(port, hostDomain, function() {
+    //Create a proxy connection and pass HTTP 200 to the socket
+    const proxySocket = new net.Socket();
+    proxySocket.connect(hostPort.port, hostPort.host, () => {
         proxySocket.write(bodyhead);
         socket.write('HTTP/' + req.httpVersion + ' 200 Connection established\r\n\r\n');
     });
 
-    proxySocket.on('data', function(chunk) {
-        socket.write(chunk);
+    //Forward traffic coming from the outside
+    proxySocket.on('data', (chunk) => { socket.write(chunk); });
+    proxySocket.on('end', () => { socket.end(); });
+    //Forward traffic coming from the inside
+    socket.on('data', (chunk) => { proxySocket.write(chunk); });
+    socket.on('end', () => { proxySocket.end(); });
+    //Handle errors from both sides
+    socket.on('error', () => {
+        proxySocket.end(); //No need to write anything because it's just a middleman
     });
-
-    proxySocket.on('end', function() {
+    proxySocket.on('error', () => {
+        socket.write('HTTP/' + req.httpVersion + ' 500 Connection error\r\n\r\n'); //Inform the user that there was an error on the proxy's side
         socket.end();
     });
-
-    proxySocket.on('error', function() {
-        socket.write('HTTP/' + req.httpVersion + ' 500 Connection error\r\n\r\n');
-        socket.end();
-    });
-
-    socket.on('data', function(chunk) {
-        proxySocket.write(chunk);
-    });
-
-    socket.on('end', function() {
-        proxySocket.end();
-    });
-
-    socket.on('error', function() {
-        proxySocket.end();
-    });
-
 });

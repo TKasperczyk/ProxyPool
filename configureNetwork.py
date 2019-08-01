@@ -5,7 +5,6 @@ import os
 import subprocess
 from pprint import pprint
 
-
 user = os.getenv('SUDO_USER')
 if (user is None):
     print('Root priviliges are needed')
