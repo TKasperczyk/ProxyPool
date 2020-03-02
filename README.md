@@ -1,4 +1,7 @@
-# ProxyPool
-Multiple HTTP proxy servers on one Linux machine. 
+<p align="center">
+    <img src="https://i.imgur.com/Gihcmc4.png" alt="ProxyPool"></img>
+</p>
 
-Detailed description: [Creating an HTTP(S) proxy server pool on a single Linux system](https://medium.com/@tomaszkasperczyk/creating-an-http-s-proxy-server-pool-on-a-single-linux-system-b11bb489b8f2)
+## [Creating an HTTP(S) proxy server pool on a single Linux system](https://medium.com/@tomaszkasperczyk/creating-an-http-s-proxy-server-pool-on-a-single-linux-system-b11bb489b8f2)
+
+This repo is a "go-to resource" for the linked Medium article.
